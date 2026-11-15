@@ -13,25 +13,25 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v4
 
-      - name: Get Telegram source
-        run: git clone --depth 1 --branch "${{ inputs.ref }}" "https://github.com/${{ inputs.upstream }}.git" telegram
+      - name: Get Telegram source (with submodules)
+        run: git clone --depth 1 --recursive --shallow-submodules --branch "${{ inputs.ref }}" "https://github.com/${{ inputs.upstream }}.git" telegram
 
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
 
-      - name: Install NDK and CMake
+      - name: Install SDK, NDK and CMake
         run: |
           SDKM="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           yes | "$SDKM" --licenses > /dev/null || true
           NDK=$(grep -rhoE "ndkVersion[ =]+\"[0-9.]+\"" telegram --include=build.gradle | head -1 | grep -oE "[0-9.]+" | head -1 || true)
-          NDK=${NDK:-21.4.7075529}
-          "$SDKM" "ndk;$NDK" "cmake;3.10.2.4988404" || true
+          NDK=${NDK:-27.2.12479018}
+          "$SDKM" "platforms;android-35" "build-tools;35.0.0" "ndk;$NDK" "cmake;3.22.1" || true
           echo "NDK $NDK"
 
       - name: Rebrand as Fluxogram

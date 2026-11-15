@@ -1,0 +1,55 @@
+name: Build Fluxogram (Telegram fork)
+
+on:
+  workflow_dispatch:
+    inputs:
+      upstream:
+        description: "Telegram source repo (your fork or DrKLO/Telegram)"
+        default: "DrKLO/Telegram"
+      ref:
+        description: "Branch / tag"
+        default: "master"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get Telegram source
+        run: git clone --depth 1 --branch "${{ inputs.ref }}" "https://github.com/${{ inputs.upstream }}.git" telegram
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install NDK and CMake
+        run: |
+          SDKM="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKM" --licenses > /dev/null || true
+          NDK=$(grep -rhoE "ndkVersion[ =]+\"[0-9.]+\"" telegram --include=build.gradle | head -1 | grep -oE "[0-9.]+" | head -1 || true)
+          NDK=${NDK:-21.4.7075529}
+          "$SDKM" "ndk;$NDK" "cmake;3.10.2.4988404" || true
+          echo "NDK $NDK"
+
+      - name: Rebrand as Fluxogram
+        env:
+          TG_API_ID: ${{ secrets.TG_API_ID }}
+          TG_API_HASH: ${{ secrets.TG_API_HASH }}
+        run: bash scripts/patch.sh telegram
+
+      - name: Build debug APK
+        working-directory: telegram
+        run: |
+          chmod +x gradlew
+          TASK=$(./gradlew :TMessagesProj_App:tasks --all -q | grep -oE 'assemble[A-Za-z0-9_]*Debug' | grep -i afat | head -1)
+          TASK=${TASK:-assembleAfatDebug}
+          echo "Running $TASK"
+          ./gradlew ":TMessagesProj_App:$TASK" --stacktrace
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Fluxogram-apk
+          path: telegram/**/build/outputs/apk/**/*.apk
